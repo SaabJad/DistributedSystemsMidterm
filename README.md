@@ -1,130 +1,241 @@
-# Distributed RAG-Based Web Scraper Framework
+Distributed RAG Scraper – Version 2
+What changed: 
+✅ Implemented
 
-A distributed Retrieval-Augmented Generation (RAG) web scraping framework with Scrapy, Ray, Kafka, MongoDB, Qdrant, and FastAPI.
+Dual-site scraping (quotes + books)
 
-## Quickstart
+Structured MongoDB storage
 
-1) Create env file
+FAISS vector indexing
 
-```bash
-copy .env.example .env
-```
+Gemini-powered summarization for retrieved results
 
-2) Start infra
+Kafka-based distributed task queue
 
-```bash
-docker compose up -d
-```
+Unified spider runner (run_spider.py)
 
-3) Run API
+Comprehensive FastAPI endpoints for retrieval and search
 
-```bash
-DistributedSystemsMidterm\venv\Scripts\python -m pip install -r requirements.txt
-uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
-```
+Working tests (test_basic.py, test_quick.py, test_quotes_scraper.py)
 
-Open http://localhost:8000/health
 
-## Services
-- API: FastAPI
-- Scraper: Scrapy + Ray
-- Messaging: Kafka
-- DB: MongoDB
-- Vector DB: Qdrant
+Gemini API integration
 
-## Development
-- Python 3.10+
-- Windows PowerShell or bash
+Improved error handling and retry logic in scraper
 
----
+Added load balancing between worker nodes
 
-## Full Code Explanation
+Fixed FAISS upsert to handle vector dimension consistency
 
-This project provides a distributed web scraping framework that leverages Retrieval-Augmented Generation (RAG) principles for scalable extraction, processing, and storage of web content.
+Removed unused clients and redundant imports
+/////////////////////////////////////////////////////////////////////////////////////////////////
 
-### Main Components
 
-#### 1. **API Layer**
-- **Framework:** FastAPI.
-- **Purpose:** Exposes endpoints to trigger scraping, check system health, and query the vector database (Qdrant).
-- **Entry Point:** `src/api/main.py` (run via Uvicorn).
-- **Example:** The `/health` endpoint shows the system is live.
+1_Project Architecture and Structure
 
-#### 2. **Web Scraping**
-- **Framework:** Scrapy (for crawling).
-- **Parallel Processing:** Ray (scales out crawling & processing).
-- **How it works:** Scrapy spiders fetch web pages. Ray distributes tasks to process pages concurrently.
+ Architecture Diagram
+Users → Nginx/HAProxy (Load Balancer)
+          ↓
+      FastAPI Gateway
+          ↓
+ ┌────────────────────────────────────────────┐
+ │          Distributed Processing Layer      │
+ │────────────────────────────────────────────│
+ │                                            │
+ │  [Scraper Workers] ←→ [Kafka] ←→ [MongoDB] │
+ │       ↑                ↓                  │
+ │   (Ray/Dask)     DLQ for retries          │
+ │                                            │
+ │  [RAG Engine] ←→ [FAISS Vector DB]        │
+ │        ↓                                   │
+ │   [Gemini Generative AI Summarizer]       │
+ │                                            │
+ │  [Prometheus / Grafana Monitoring]         │
+ └────────────────────────────────────────────┘
+          ↓
+      Docker / Kubernetes Cluster
 
-#### 3. **Data Processing**
-- **Cleaning & Parsing:**  
-  - Defined in `src/processing/clean.py`.
-  - Uses BeautifulSoup with lxml to parse raw HTML, remove unwanted elements (script/style/noscript), extract title, main text, and all links.
-- **Batch Processing:**  
-  - Handled in `src/processing/processor.py`.
-  - Functions allow batch or single-page parsing, with timing metrics.
-  - Results stored in MongoDB and also indexed into Qdrant.
 
-#### 4. **Storage**
-- **MongoDB:**  
-  - Stores parsed results (title, main text, links, fetched at, status).
-  - Interfaced via `src/infra/mongo/client.py`.
-- **Vector DB (Qdrant):**  
-  - Stores vectorized representations (embeddings) of parsed content for efficient retrieval.
-  - Indexed after parsing using functions in `src/rag/pipeline.py`.
 
-#### 5. **Messaging**
-- **Kafka:**  
-  - Used as a distributed message queue.
-  - Coordinates communication between scrapers, processors, and storage tasks.
+DistributedSystemsMidterm/
+├── src/
+│   ├── api/
+│   │   └── search.py
+|   |   |── main.py         # FastAPI endpoints
+│   ├── common/
+│   │   └── models.py       # RawPage, ParsedPage Pydantic models
+│   ├── infra/
+│   │   ├── vector/faiss_client.py  # FAISS client for vector storage
+│   │   ├── mongo/client.py         # MongoDB client
+│   │   └── kafka/client.py         # Kafka client 
+│   ├── processing/
+│   │   ├── clean.py
+│   │   └── processor.py            # Process quotes & book images
+│   ├── rag/
+│   │   ├── embeddings.py 
+|   |   |──llm.py
+|   |   |──search_and_summarize.py         
+│   │   └── pipeline.py             # Chunking & indexing parsed pages
+│   └── scraper/
+│       ├── run_spider.py           # Unified spider runner
+│       ├── run_quotes_spider.py    # Example specialized spider
+│       ├── distributed_ray_runner.py
+|       |──kafka_consumer_worker.py
+|       |──kafka_consumer.py
+|       |──kafka_producer.py
+│       └── spiders/
+│           ├── basic_spider.py
+|           |──books_spider.py
+│           └── quotes_spider.py
+|── data\book_images...
+├── scrapy/
+│   ├── __init__.py
+│   └── crawler.py
+|── faiss_metadata.json
+|── docker-compose.yml
+|── promethius.yml
+|── pyproject.toml
+|── requirements.txt
+│── test_basic.py
+│── test_quick.py
+|── test_quotes_scraper.py
+└── README.md
 
-#### 6. **Configuration & Dependencies**
-- **Settings:**  
-  - Environment variables loaded from `.env`.
-  - `.env.example` provides a template.
-- **Dependencies:**  
-  - Listed in `requirements.txt` for Python packages (incl. FastAPI, Scrapy, Ray, Dask, MongoDB, Qdrant, LangChain, Kafka, etc.).
-  - Managed and built using `pyproject.toml`.
+/////////////////////////////////////////////////////////////////////////////////////////////////
+Prerequisites
 
-#### 7. **Project Structure**
-- **`src/common/models.py`:**  
-  Defines Pydantic models (e.g., `RawPage`, `ParsedPage`) for strongly-typed data across the system.
-- **`src/processing/clean.py`:**  
-  Core HTML parsing and cleaning functionality.
-- **`src/processing/processor.py`:**  
-  Handles single/batch processing, timing, persistence, and indexing.
-- **`src/infra/`:**  
-  Modules for external service integration (MongoDB, Qdrant, Kafka, etc.).
-- **`src/rag/`:**  
-  Handles pipeline for RAG operations such as embedding and retrieval.
+Python 3.10+
 
-### Example Data Flow
+MongoDB (running locally or remotely)
 
-1. **User/API triggers a scrape.**
-2. **Scrapy spider fetches raw HTML** (`RawPage` object).
-3. **Ray distributes raw pages** to be parsed.
-4. **Parsing cleans/extracts:**  
-     - Title  
-     - Main text  
-     - Links
-5. **Store parsed result in MongoDB.**
-6. **Best-effort: index content into Qdrant** for semantic retrieval via embeddings.
-7. **Logs & metrics** captured for monitoring and efficiency.
+Kafka (for distributed scraping)
 
-### Key Technologies Used
+FAISS (installed automatically via requirements.txt)
 
-- **FastAPI:** Fast, type-checked API.
-- **Scrapy:** Robust crawling.
-- **Ray/Dask:** Distributed processing for scale.
-- **Kafka:** Fault-tolerant message pipeline.
-- **MongoDB:** Reliable data storage.
-- **Qdrant:** Fast vector retrieval for RAG workflows.
-- **BeautifulSoup/lxml:** HTML parsing and cleaning.
-- **Pydantic:** Data validation and serialization.
-- **LangChain:** Future integration for large language model (LLM) workflows.
+Gemini API Key (for LLM summaries and embeddings)
+/////////////////////////////////////////////////////////////////////////////////////////////////
+Setup
 
----
+Create and activate a virtual environment:
 
-This modular and distributed design ensures that the system can efficiently scrape, clean, persist, and retrieve relevant web content at scale, ready for RAG or LLM-powered applications.
-If you want to extend functionality (like custom crawling, new data sources, or improved embeddings), add new modules to the `src/` hierarchy and register your changes with the relevant entrypoints.
-For detailed logic, refer to code comments and the docstrings found in each key file.
-Questions? Start reading the code at the FastAPI entrypoint and follow the data flow!
+python -m venv venv
+venv\Scripts\activate  # Windows
+source venv/bin/activate  # Linux/Mac
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+Install dependencies:
+
+pip install -r requirements.txt
+
+
+Create a .env file in the project root:
+
+MONGO_URI=mongodb://localhost:27017
+FAISS_INDEX_PATH=faiss_index.bin
+GEMINI_API_KEY= 
+
+
+Run a local MongoDB instance (default URI: mongodb://localhost:27017/).
+/////////////////////////////////////////////////////////////////////////////////////////////////
+Note:
+The FAISS index file will be automatically created on first run.
+If Kafka is configured, tasks will be distributed among multiple worker nodes.
+/////////////////////////////////////////////////////////////////////////////////////////////////
+Step 1 – Run Spiders
+Quotes spider (text scraping)
+python -m src.scraper.run_spider quotes --start-url https://quotes.toscrape.com/
+
+Books spider (image + metadata scraping)
+python -m src.scraper.run_spider books --start-url https://books.toscrape.com/
+
+Distributed mode (optional)
+
+Use Kafka to balance scraping tasks between workers:
+
+python -m src.scraper.distributed_ray_runner --topic quotes_tasks
+
+
+These spiders fetch, clean, and store structured content into MongoDB and FAISS.
+/////////////////////////////////////////////////////////////////////////////////////////////////
+Step 2 – Run FastAPI Server
+
+Start the API service:
+
+uvicorn src.api.main:app --reload
+
+
+Open the API docs:
+
+Swagger UI: http://127.0.0.1:8000/docs
+
+ReDoc: http://127.0.0.1:8000/redoc
+/////////////////////////////////////////////////////////////////////////////////////////////////
+Step 3 – Example API Requests
+Search quotes (semantic + summarized)
+curl "http://127.0.0.1:8000/search/quotes?query=inspiration&top_k=5"
+
+Get all books
+curl "http://127.0.0.1:8000/books"
+
+Semantic book search with Gemini summaries
+curl "http://127.0.0.1:8000/search/books?query=philosophy"
+/////////////////////////////////////////////////////////////////////////////////////////////////
+4. Architecture Overview
+Scraping Layer
+
+BasicSpider → Generic spider for unstructured pages
+
+QuotesSpider → Specialized scraper for quotes
+
+BooksSpider → Extracts book metadata and image URLs
+
+Supports Kafka-based distributed crawling for large-scale workloads
+
+Processing Layer
+
+Cleans and normalizes text using clean.py
+
+Stores processed data into MongoDB (quotes, books, and book_images collections)
+
+Embeds text via src/rag/embeddings.py using Gemini Embeddings API
+
+RAG / Vector Store Layer
+
+FAISS client (src/infra/vector/faiss_client.py) manages local vector storage
+
+Texts are chunked and indexed through src/rag/pipeline.py
+
+Gemini LLM generates contextual summaries for retrieved text chunks
+
+Enables semantic search across quotes and books
+
+API Layer (FastAPI)
+
+/quotes → Retrieve stored quotes
+
+/books → Retrieve stored books
+
+/search/quotes → FAISS-based semantic quote search
+
+/search/books → Semantic search + Gemini contextual summaries
+
+Includes pagination, filters, and structured JSON responses
+
+Deployment Layer
+
+Dockerized microservices (API, Scraper, RAG, Vector DB)
+
+Docker Compose for local orchestration
+
+Optional Kubernetes deployment with autoscaling
+
+HAProxy/Nginx for API load balancing
+
+Prometheus/Grafana for system monitoring and alerting
+
+
+
+
+
+
+

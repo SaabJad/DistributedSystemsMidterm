@@ -18,3 +18,5 @@ ray
 pika
 numpy
 langchain-google-genai
+prometheus_client
+kafka-python
