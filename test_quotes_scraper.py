@@ -163,7 +163,27 @@ def main():
         print("\n[WARNING] Some tests failed")
     
     return passed == total
-
+def test_quotes_spider_runs(tmp_path):
+    spider = QuotesSpider(start_url="https://quotes.toscrape.com/")
+    count = 0
+    for item in spider.parse_page(spider.fetch(spider.start_url), spider.start_url):
+        assert item.text
+        assert item.author
+        count += 1
+        if count >= 3:
+            break
+    assert count >= 1
+def test_book_images_spider_runs(tmp_path):
+    spider = BooksSpider(start_url="https://books.toscrape.com/")
+    count = 0
+    for item in spider.parse_page(spider.fetch(spider.start_url), spider.start_url):
+        assert item.title
+        assert item.price
+        assert item.image_url
+        count += 1
+        if count >= 3:
+            break
+    assert count >= 1
 
 if __name__ == "__main__":
     success = main()

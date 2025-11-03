@@ -1,47 +1,96 @@
-from time import perf_counter
-from typing import Iterable, List, Dict, Any
+# src/processing/processor.py
+import re
+from src.processing.clean import clean_text
+from src.infra.mongo.client import MongoClientSingleton
+from src.infra.vector.faiss_client import FaissClient
+from src.rag.embeddings import get_embedding  # hash fallback or actual model
+from bson import ObjectId
+from src.rag.pipeline import get_faiss_client, chunk_text, embed_text
 
-from src.common.models import RawPage, ParsedPage
-from src.processing.clean import parse_html
-from src.infra.mongo.client import insert_parsed
-from src.rag.pipeline import index_parsed_page
+mongo = MongoClientSingleton().db
+faiss = FaissClient()
 
-
-def process_and_store(raw: RawPage) -> ParsedPage:
-    """Parse a RawPage and persist the ParsedPage into MongoDB.
-
-    Returns the ParsedPage object for immediate use.
+def index_quote_item(item):
     """
-    parsed: ParsedPage = parse_html(raw)
-    # Convert Pydantic model to plain dict for storage
-    doc = parsed.dict()
-    insert_parsed(doc)
-    try:
-        # Index parsed page into vector store (best-effort)
-        index_parsed_page(parsed)
-    except Exception:
-        # don't let indexing failures break processing flow
-        pass
-    return parsed
-
-def process_batch(raws: Iterable[RawPage]) -> List[ParsedPage]:
-    """Process a batch of RawPage objects and store each parsed result.
-
-    Returns the list of ParsedPage objects.
+    Optional: index quotes in FAISS for semantic search.
+    Each quote is treated as a ParsedPage-like object.
     """
-    return [process_and_store(r) for r in raws]
-
-
-def process_batch_with_timing(raws: Iterable[RawPage]) -> Dict[str, Any]:
-    """Process a batch and return timing metrics and parsed results summary.
-
-    Returns a dictionary with keys: `count`, `elapsed_seconds`, `parsed_urls`.
-    """
-    start = perf_counter()
-    parsed = process_batch(raws)
-    elapsed = perf_counter() - start
-    return {
-        "count": len(parsed),
-        "elapsed_seconds": elapsed,
-        "parsed_urls": [p.url for p in parsed],
+    parsed = type("ParsedPageLike", (), {})()
+    parsed.main_text = item.text
+    parsed.url = item.url
+    parsed.title = item.author
+    parsed.fetched_at = item.scraped_at
+    ids = []
+    client = get_faiss_client()
+    chunks = chunk_text(parsed.main_text)
+    for idx, chunk in enumerate(chunks):
+        emb = embed_text(chunk)
+        metadata = {
+            "url": parsed.url,
+            "title": parsed.title,
+            "chunk_id": idx,
+            "text": chunk,
+            "fetched_at": parsed.fetched_at.isoformat(),
+        }
+        vid = client.upsert(emb, metadata)
+        ids.append(vid)
+    return ids
+    
+def process_quote_item(item):
+    text = clean_text(item.text)
+    doc = {
+        "text": text,
+        "author": item.author,
+        "tags": item.tags,
+        "url": item.url,
+        "scraped_at": item.scraped_at
     }
+
+    # Update MongoDB
+    res = mongo.quotes.update_one(
+        {"url": item.url, "text": text},
+        {"$set": doc},
+        upsert=True
+    )
+
+    # Get document _id
+    if res.upserted_id:
+        doc_id = res.upserted_id
+    else:
+        existing = mongo.quotes.find_one({"url": item.url, "text": text}, {"_id": 1})
+        doc_id = existing["_id"] if existing else None
+
+    # Compute embedding
+    emb = get_embedding(text)
+
+    # Upsert vector into FAISS
+    faiss.upsert(
+        embedding=emb,
+        metadata={"text": text, "author": item.author},
+        id=None  # optional, can auto-generate or convert ObjectId to int
+    )
+
+    return {"_id": doc_id, **doc}
+
+
+def process_book_image_item(item):
+    """
+    Store book image info in MongoDB.
+    Currently FAISS embedding is not used for images.
+    """
+    doc = {
+        "title": item.title,
+        "price": item.price,
+        "image_url": item.image_url,
+        "local_path": item.local_path,
+        "page_url": item.page_url,
+        "scraped_at": item.scraped_at
+    }
+
+    # Use update_one with $set instead of replace_one with $set to avoid errors
+    mongo.book_images.update_one(
+        {"image_url": item.image_url},
+        {"$set": doc},
+        upsert=True
+    )
+    return doc

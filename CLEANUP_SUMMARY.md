@@ -169,5 +169,3 @@ Your distributed RAG scraper is working with:
 - ✅ **Messaging**: Kafka ready
 
 **Status: PRODUCTION READY** 🚀
-this is what i get on the  http://127.0.0.1:8000/ when i run the uvicorn it should be better 
-{"service":"rag-scraper","env":"dev"}

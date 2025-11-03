@@ -75,7 +75,7 @@ class FaissClient:
             if id is None:
                 id = self._next_id
                 self._next_id += 1
-
+            query_embedding = embed_text(query, dim=FAISS_DIM)
             vec = np.asarray(embedding, dtype="float32")
             if vec.shape[0] != self.dim:
                 # Try to pad or trim

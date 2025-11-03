@@ -63,36 +63,49 @@
 # 	col.insert_one(raw_doc)
 
 # src/infra/mongo/client.py
-from typing import Optional
+# from typing import Optional
+# from pymongo import MongoClient
+# import os
+
+# MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+# MONGO_DB = os.getenv("MONGO_DB", "rag_scraper")
+
+
+# class Mongo:
+#     def __init__(self, uri: Optional[str] = None, db_name: Optional[str] = None):
+#         self.uri = uri or MONGO_URI
+#         self.db_name = db_name or MONGO_DB
+#         self.client = MongoClient(self.uri, serverSelectionTimeoutMS=2000)
+#         self.db = self.client[self.db_name]
+#         # Collections
+#         self.raw = self.db["raw_pages"]
+#         self.clean = self.db["clean_pages"]
+
+#     def insert_raw(self, doc: dict):
+#         return self.raw.insert_one(doc)
+
+#     def get_raw(self, doc_id):
+#         return self.raw.find_one({"_id": doc_id})
+
+#     def insert_clean(self, doc: dict):
+#         return self.clean.insert_one(doc)
+
+#     def find_clean(self, filter=None, limit=50):
+#         filter = filter or {}
+#         return list(self.clean.find(filter).limit(limit))
+
+#     def get_clean(self, doc_id):
+#         return self.clean.find_one({"_id": doc_id})
+# src/infra/mongo/client.py
 from pymongo import MongoClient
 import os
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-MONGO_DB = os.getenv("MONGO_DB", "rag_scraper")
-
-
-class Mongo:
-    def __init__(self, uri: Optional[str] = None, db_name: Optional[str] = None):
-        self.uri = uri or MONGO_URI
-        self.db_name = db_name or MONGO_DB
-        self.client = MongoClient(self.uri, serverSelectionTimeoutMS=2000)
-        self.db = self.client[self.db_name]
-        # Collections
-        self.raw = self.db["raw_pages"]
-        self.clean = self.db["clean_pages"]
-
-    def insert_raw(self, doc: dict):
-        return self.raw.insert_one(doc)
-
-    def get_raw(self, doc_id):
-        return self.raw.find_one({"_id": doc_id})
-
-    def insert_clean(self, doc: dict):
-        return self.clean.insert_one(doc)
-
-    def find_clean(self, filter=None, limit=50):
-        filter = filter or {}
-        return list(self.clean.find(filter).limit(limit))
-
-    def get_clean(self, doc_id):
-        return self.clean.find_one({"_id": doc_id})
+class MongoClientSingleton:
+    _instance = None
+    def __new__(cls):
+        if cls._instance is None:
+            mongo_url = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+            client = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
+            cls._instance = client
+            cls._instance.db = client.get_database(os.getenv("MONGO_DB", "scraper_db"))
+        return cls._instance

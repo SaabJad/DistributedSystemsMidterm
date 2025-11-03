@@ -7,6 +7,20 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 api_key = os.getenv("API_KEY")
+import hashlib
+
+def get_embedding(text: str):
+    """
+    Generate a deterministic hash-based embedding for a given text.
+    This acts as a fallback when no real embedding model (like OpenAI or SentenceTransformers) is used.
+    """
+    if not text:
+        return [0.0] * 8  # minimal dummy vector
+
+    # Convert the SHA256 hash into a numeric embedding (8-dimensional vector)
+    hash_digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    vector = [int(hash_digest[i:i+8], 16) % 1000 / 1000.0 for i in range(0, 64, 8)]
+    return vector
 try:
     if api_key:
         import openai
