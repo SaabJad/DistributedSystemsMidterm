@@ -9,8 +9,12 @@ confluent-kafka==2.6.0
 pymongo[srv]==4.10.1
 qdrant-client==1.12.0
 langchain==0.3.7
-langchain-openai==0.2.6
 tenacity==9.0.0
 python-dotenv==1.0.1
 orjson==3.10.7
-
+requests==2.31.0
+faiss-cpu==1.7.4
+ray==2.34.0
+pika==1.3.2
+numpy==1.24.3
+langchain-google-genai==0.3.3

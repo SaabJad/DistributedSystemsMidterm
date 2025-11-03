@@ -15,7 +15,6 @@ class ParsedPage(BaseModel):
     fetched_at: datetime
     title: Optional[str] = None
     main_text: Optional[str] = None
-    links: List[str] = []
-    metadata: Dict[str, str] = {}
-
+    links: List[str] = Field(default_factory=list)
+    metadata: Dict[str, str] = Field(default_factory=dict)
 
